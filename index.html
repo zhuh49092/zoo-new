@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no">
+    <title>みなのガーデン</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="garden.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="pubjs.js?v=2"></script>
+    <script>
+        // 可配置的内容 - 以下设置可以根据需要修改
+        window.GARDEN_CONFIG = {
+            // 植物图片列表 - 可以添加或修改植物图片
+            // 植物图片列表 - 只需填写文件名（不含前缀和后缀）
+            // 程序会自动添加 'plant/' 前缀和 '.png' 后缀
+            plantImages: [
+                'flower_amaryllis',
+                'flower_anthurium',
+                'flower_ayame',
+                'flower_blue_bonnet',
+                'flower_cattleya',
+                'flower_christmas_rose',
+                'flower_crocus',
+                'flower_gaku_ajisai',
+                'flower_gloriosa',
+                'flower_himekaiu_calla',
+                'flower_hyacinth',
+                'flower_kalmia_karumia',
+                'flower_katakuri',
+                'flower_kikyou',
+                'flower_kuroyuri',
+                'flower_marigold',
+                'flower_nanohana',
+                'flower_nemophila',
+                'flower_ooinunofuguri',
+                'flower_rose_rainbow',
+                'flower_saffron_safuran',
+                'flower_sandersonia',
+                'flower_shirotsumegusa',
+                'flower_syakoba_saboten',
+                'flower_tsubuwaki',
+                'flower_whitelaceflower',
+                'herb_geranium',
+                'kinoko_porcino_poruchini',
+                'plant_flower_seitaka_awadachisou',
+                'rose_blue'
+            ],
+
+            // 世界尺寸 - 花园世界的大小（像素）
+            worldSize: {
+                width: 3000,  // 宽度
+                height: 2000  // 高度
+            },
+
+            // 时间段配置
+            // enabled: 是否启用按时段改变背景，false 时不显示遮罩
+            // 时间以分钟为单位（一天的总分钟数）
+            timePeriods: {
+                enabled: true,           // 开关：true=启用时段背景, false=不启用
+                morning: { start: 300, end: 345, color: '#ff751f', opacity: 0.2 },  // 5:00-5:45 清晨
+                day: { start: 345, end: 1050, color: 'transparent', opacity: 1 },     // 5:45-17:30 白天
+                evening: { start: 1050, end: 1095, color: '#ff751f', opacity: 0.2 }, // 17:30-18:15 傍晚
+                night: { start: 1095, end: 300, color: '#004aad', opacity: 0.4 }    // 18:15-5:00 夜晚
+            },
+
+            // 昆虫配置
+            bugConfig: {
+                butterfly: {
+                    count: 3,              // 初始蝴蝶数量
+                    minInterval: 8000,     // 生成蝴蝶的最小间隔（毫秒）
+                    maxInterval: 15000,    // 生成蝴蝶的最大间隔（毫秒）
+                    spawnDelayMin: 1000,   // 初始生成的最小延迟（毫秒）
+                    spawnDelayMax: 3000    // 初始生成的最大延迟（毫秒）
+                },
+                bee: {
+                    count: 3,              // 初始蜜蜂数量
+                    minInterval: 6000,     // 生成蜜蜂的最小间隔（毫秒）
+                    maxInterval: 12000,    // 生成蜜蜂的最大间隔（毫秒）
+                    spawnDelayMin: 800,    // 初始生成的最小延迟（毫秒）
+                    spawnDelayMax: 2500    // 初始生成的最大延迟（毫秒）
+                },
+                firefly: {
+                    count: 12              // 萤火虫数量（夜晚显示）
+                }
+            },
+
+            // 植物配置
+            plantConfig: {
+                imageWidth: 80,      // 植物图片宽度（像素）
+                dragThreshold: 5     // 拖拽阈值（像素）
+            },
+
+            // 缩放配置
+            zoomConfig: {
+                minScale: 0.3,       // 最小缩放比例
+                maxScale: 3,         // 最大缩放比例
+                scaleFactor: 1.2,    // 点击缩放按钮的缩放因子
+                wheelFactor: 1.1     // 鼠标滚轮的缩放因子
+            },
+
+            // UI配置
+            uiConfig: {
+                timeUpdateInterval: 60000,  // 时间更新间隔（毫秒）
+                commentChance: 0.5,         // 初始植物带评论的概率
+                sampleComments: ['好漂亮的花！', '真美！', '喜欢这个！', '太棒了！']  // 示例评论
+            },
+
+            // 交互与动画配置 - 可根据需要调整
+            interactionConfig: {
+                // 重叠检查
+                overlapMinDistance: 80,       // 花草最小间距（像素），小于此值视为重叠
+                overlapMaxAttempts: 30,        // 种植时尝试寻找空位的最大次数
+
+                // 初始显示
+                initialScale: 1.5,             // 初始放大倍数
+                initialTranslateRandom: true,  // 是否随机初始位置
+
+                // 文字稿件
+                textPlantPreviewLength: 4,     // 纯文字稿件在圆圈中显示的前几个字
+
+                // 提示消息
+                bubbleMessageDuration: 2000,   // 冒泡提示停留时间（毫秒）
+                activityMessageDuration: 10000,// 活跃度提示停留时间（毫秒）
+
+                // 投稿相关
+                submitSuccessCloseDelay: 1000,     // 投稿成功后关闭弹窗延迟（毫秒）
+                commentSuccessRefreshDelay: 800,   // 评论成功后刷新弹窗延迟（毫秒）
+
+                // 其他
+                plantArrowHideDelay: 5000,       // 新植物箭头隐藏延迟（毫秒）
+                dragClickDelay: 500,             // 拖动后允许点击的延迟（毫秒）
+                dragJustDraggedDelay: 200        // 拖动状态残留标记时间（毫秒）
+            },
+
+            // 活跃度提示配置
+            activityConfig: {
+                activeUsersTimeout: 180000,      // "有人活动"提示重置间隔（毫秒），0表示只显示一次
+                minTodayVisitorsToShow: 5        // 今日访客数达到此值时显示提示
+            }
+        };
+    </script>
+  
+    <script src="garden-core.js?v=2"></script>
+</head>
+<body>
+    <div id="garden-container">
+        <div id="garden-world">
+            <div id="background-layer"></div>
+            <div id="time-overlay"></div>
+            <div id="plants-layer"></div>
+        </div>
+    </div>
+
+    <button id="plant-btn" title="种植"></button>
+
+    <div id="zoom-controls">
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="zoom-btn" id="zoom-out">-</button>
+        <button class="zoom-btn" id="zoom-reset">⟲</button>
+    </div>
+
+    <div id="modal-overlay" class="hidden" style="display: none;">
+        <div id="modal-content">
+            <!-- 标题栏 -->
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">
+                    <i class="fas fa-seedling"></i>
+                    <span></span>
+                </h3>
+                <button id="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- 内容区 -->
+            <div class="modal-body">
+                <!-- 内容由 JavaScript 动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 作者输入弹窗 -->
+    <div id="author-modal-overlay" class="hidden" style="display: none;">
+        <div id="author-modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-user"></i>
+                    <span>作者信息</span>
+                </h3>
+                <button id="author-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="author-name">昵称：</label>
+                    <input type="text" id="author-name" placeholder="请输入您的昵称">
+                </div>
+                <div class="form-group">
+                    <label for="author-contact">联系方式（选填）：</label>
+                    <input type="text" id="author-contact" placeholder="邮箱或社交媒体">
+                </div>
+                <button id="author-save-btn" class="submit-btn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 投稿弹窗 -->
+    <div id="submit-modal-overlay" class="hidden" style="display: none;">
+        <div id="submit-modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-upload"></i>
+                    <span>投稿确认</span>
+                </h3>
+                <button id="submit-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="submit-title">作品标题：</label>
+                    <input type="text" id="submit-title" placeholder="请输入作品标题">
+                </div>
+                <div class="form-group">
+                    <label for="submit-description">作品描述：</label>
+                    <textarea id="submit-description" placeholder="请描述您的花园创作"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="submit-agree"> 我同意投稿条款
+                    </label>
+                </div>
+                <button id="submit-confirm-btn" class="submit-btn">确认投稿</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ambient-layer"></div>
+
+    <script>
+        $(document).ready(function() {
+            initGarden();
+        });
+    </script>
+</body>
+</html>

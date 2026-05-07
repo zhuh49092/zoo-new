@@ -1,0 +1,663 @@
+
+// 全局变量 - 设置数据表单ID
+const SPREADSHEET_ID = '13zLYXa23vOVmhks0Uts6taeB1RIgKEC6no4v_QPMSdQ';
+const SHEET_NAME = 'sheet1';
+const SHEET_NAME2 = 'rlist';
+
+// 缓存 sheet 引用，避免重复调用 getActiveSpreadsheet()
+let cachedSheets = [];
+function getSheet(index) {
+  if (!cachedSheets[index]) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    cachedSheets = ss.getSheets();
+  }
+  return cachedSheets[index];
+}
+
+// 缓存数据读取结果
+const CACHE_KEYS = {
+  ALL_RECORDS: 'all_records',
+  ALL_COMMENTS: 'all_comments',
+  RECORD_HEADERS: 'record_headers',
+  COMMENT_HEADERS: 'comment_headers',
+  VIEW_HEADERS: 'view_headers'
+};
+const CACHE_TTL = 300; // 5分钟
+
+function getCachedData(key) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(key);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      cache.remove(key);
+    }
+  }
+  return null;
+}
+
+function setCachedData(key, data, ttl) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.put(key, JSON.stringify(data), ttl || CACHE_TTL);
+  } catch (e) {
+    // 缓存失败不影响主流程
+  }
+}
+
+// 获取 sheet 数据并缓存
+function getSheetData(sheetIndex) {
+  const cacheKey = sheetIndex === 0 ? CACHE_KEYS.ALL_RECORDS : CACHE_KEYS.ALL_COMMENTS;
+  const cached = getCachedData(cacheKey);
+  if (cached) return cached;
+  
+  const sheet = getSheet(sheetIndex);
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  
+  const records = [];
+  const headers = values[0];
+  
+  for (let i = 1; i < values.length; i++) {
+    const record = {};
+    for (let j = 0; j < headers.length; j++) {
+      const key = headers[j].toLowerCase().replace(/\s+/g, '_');
+      record[key] = values[i][j];
+    }
+    records.push(record);
+  }
+  
+  setCachedData(cacheKey, { success: true, count: records.length, data: records });
+  return { success: true, count: records.length, data: records };
+}
+
+// 清除相关缓存
+function invalidateCache(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (key) {
+      cache.remove(key);
+    } else {
+      Object.values(CACHE_KEYS).forEach(k => cache.remove(k));
+    }
+  } catch (e) {}
+}
+
+/**
+ * HTTP GET请求处理函数
+ * @param {Object} e HTTP请求事件对象
+ */
+function doGet(e) {
+  // 设置CORS头部
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+    
+ try {
+    const action = e.parameter.action || 'getAllRecords';
+    
+    switch(action) {
+      case 'getallrecords':
+        const result = getSheetData(0);
+        output.setContent(JSON.stringify(result));
+        break;
+      case 'getallcomment':
+        const result2 = getSheetData(1);
+        output.setContent(JSON.stringify(result2));
+        break;            
+      case 'getstatus':
+        const statusResult = {
+          success: true,
+          message: '服务运行正常',
+          timestamp: new Date().toISOString()
+        };
+        output.setContent(JSON.stringify(statusResult));
+        break;
+      case 'getlatestrecords':
+        const sinceDate = e.parameter.since || '';
+        const latestResult = getLatestRecords(sinceDate);
+        output.setContent(JSON.stringify(latestResult));
+        break;
+      case 'getlatestcomments':
+        const sinceDate2 = e.parameter.since || '';
+        const latestCommentResult = getLatestComments(sinceDate2);
+        output.setContent(JSON.stringify(latestCommentResult));
+        break;
+      case 'getactivity':
+        const activityResult = getActivityStats();
+        output.setContent(JSON.stringify(activityResult));
+        break;
+        
+      default:
+        const defaultResult = getAllRecords();
+        output.setContent(JSON.stringify(defaultResult));
+    }
+  } catch (error) {
+    const errorResult = {
+      success: false,
+      message: '请求处理失败: ' + error.toString(),
+      error: error.toString()
+    };
+    output.setContent(JSON.stringify(errorResult));
+  }  
+
+  return output;
+}
+
+/**
+ * HTTP POST请求处理函数
+ * @param {Object} e HTTP请求事件对象
+ */
+function doPost(e) {
+  // 设置CORS头部
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+ try {
+    const requestData = JSON.parse(e.postData.contents);
+    const action = requestData.action;
+    const record=requestData.record;
+    switch(action) {
+      case 'save':
+        const saveResult = saveRecord(record);
+        if (saveResult.success) invalidateCache();
+        output.setContent(JSON.stringify(saveResult));
+        break;
+        
+      case 'addlike': //点赞
+        const updateResult = updateRecordFieldById(record.id,"Likes",1);
+        saveView(record.id,'like',record.entry_type,record.key_id,record.name)
+        if (updateResult.success) invalidateCache();
+        output.setContent(JSON.stringify(updateResult));
+        break;
+      case  'comment':  //评论
+        const commentResult = saveComment(record);
+        if(commentResult.success){
+          updateRecordFieldById(record.rid,"Comments",1);
+          invalidateCache();
+        }
+        output.setContent(JSON.stringify(commentResult));      
+        break;
+      case 'view':  //浏览
+        const viewResult=saveView(record.rid,'view',record.entry_type,record.key_id,record.name)
+        output.setContent(JSON.stringify(viewResult));             
+        break;
+      case 'updatePosition':  //更新花草位置
+        const positionResult = updatePosition(record);
+        if (positionResult.success) invalidateCache();
+        output.setContent(JSON.stringify(positionResult));             
+        break;
+      case 'visit':  //页面访问
+        const visitResult=saveView('','visit',record.entry_type,'',record.name)
+        output.setContent(JSON.stringify(visitResult));             
+        break;
+      default:
+        output.setContent(JSON.stringify({
+          success: false,
+          message: '未知操作类型: ' + action
+        }));
+    }
+  } catch (error) {
+    const errorResult = {
+      success: false,
+      message: '请求处理失败: ' + error.toString(),
+      error: error.toString()
+    };
+    output.setContent(JSON.stringify(errorResult));
+  }
+  
+  return output;
+}
+
+
+function generateUniqueId() {
+  const timestamp = new Date().getTime();
+  const randomPart = Math.floor(Math.random() * 10000);
+  return `${timestamp}-${randomPart}`;
+}
+
+/**
+ * 更新花草位置
+ * @param {Object} record { rid: 记录ID, x: X坐标, y: Y坐标 }
+ */
+function updatePosition(record) {
+  try {
+    const sheet = getSheet(0);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+    
+    let idColumnIndex = -1;
+    let xColumnIndex = -1;
+    let yColumnIndex = -1;
+    
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (h === 'id' || h === 'rid') {
+        idColumnIndex = i;
+      }
+      if (h === 'x') {
+        xColumnIndex = i;
+      }
+      if (h === 'y') {
+        yColumnIndex = i;
+      }
+    }
+    
+    if (idColumnIndex === -1 || xColumnIndex === -1 || yColumnIndex === -1) {
+      throw new Error('未找到必要的列（ID/X/Y）');
+    }
+    
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (values[i][idColumnIndex] == record.rid) {
+        const row = i + 1;
+        sheet.getRange(row, xColumnIndex + 1).setValue(Number(record.x));
+        sheet.getRange(row, yColumnIndex + 1).setValue(Number(record.y));
+        
+        return {
+          success: true,
+          message: '位置更新成功'
+        };
+      }
+    }
+    
+    throw new Error('未找到ID为 ' + record.rid + ' 的记录');
+  } catch (error) {
+    return {
+      success: false,
+      message: '更新位置失败: ' + error.toString()
+    };
+  }
+}
+
+function updateRecordFieldById(recordId, fieldName, incrementValue = 1) {
+  try {
+    const sheet = getSheet(0);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+    
+    // 使用预定义列名避免重复查找（Sheet1: ID=0, Likes=7, Comments=8）
+    let idColumnIndex = -1;
+    let targetColumnIndex = -1;
+    
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (h === 'id' || h === 'rid') {
+        idColumnIndex = i;
+      }
+      if (h === fieldName.toLowerCase() || headers[i] === fieldName) {
+        targetColumnIndex = i;
+      }
+    }
+    
+    if (idColumnIndex === -1 || targetColumnIndex === -1) {
+      throw new Error('未找到必要的列');
+    }
+    
+    // 从后往前查找，提高找到最新记录的概率
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (values[i][idColumnIndex] == recordId) {
+        const row = i + 1;
+        const currentValue = values[i][targetColumnIndex];
+        
+        if (typeof currentValue !== 'number' && isNaN(Number(currentValue))) {
+          throw new Error('字段 ' + fieldName + ' 不是数值型');
+        }
+        
+        sheet.getRange(row, targetColumnIndex + 1).setValue(Number(currentValue) + incrementValue);
+        
+        return {
+          success: true,
+          message: '记录更新成功',
+          data: { id: recordId, newValue: Number(currentValue) + incrementValue }
+        };
+      }
+    }
+    
+    throw new Error('未找到ID为 ' + recordId + ' 的记录');
+  } catch (error) {
+    return {
+      success: false,
+      message: '更新记录失败: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+function  saveComment(record)
+{
+  try{
+    const sheet = getSheet(1);
+    const uniqueId = generateUniqueId();
+    const timestamp = new Date();
+    sheet.appendRow([
+      uniqueId,
+      record.rid||'',
+      record.comment || '',
+      timestamp,
+      record.name
+    ]);
+    saveView(record.rid,'comment',record.entry_type,record.key_id,record.name)
+    return {
+      success: true,
+      message: 'save sucess',
+      data: {rid:record.rid,timestamp: timestamp}
+    };    
+  }
+catch (error) {
+    return {
+      success: false,
+      message: 'save fail: ' + error.toString(),
+      error: error.toString()
+    };
+  } 
+
+}
+
+function  saveView(rid,event_type,entry_type,key_id,name)
+{
+  try{
+    const sheet = getSheet(2);
+    const uniqueId = generateUniqueId();
+    const timestamp = new Date();
+    sheet.appendRow([
+      uniqueId,
+      rid||'',
+      timestamp,
+      event_type || '',
+      entry_type|| '',
+      key_id|| '',
+      name||'ano'
+    ]); 
+    return {
+      success: true,
+      message: 'save sucess',
+      data: {rid:rid,timestamp: timestamp}
+    };    
+  }
+catch (error) {
+    return {
+      success: false,
+      message: 'save fail: ' + error.toString(),
+      error: error.toString()
+    };
+  } 
+
+}
+
+function saveRecord(record) {
+  try {
+    const sheet = getSheet(0);
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    // 根据列名查找位置（不区分大小写）
+    function colIndex(name) {
+      for (let i = 0; i < headers.length; i++) {
+        if (headers[i].toString().toLowerCase() === name.toLowerCase()) return i + 1; // 1-based
+      }
+      return -1;
+    }
+    
+    const timestamp = new Date();
+    const lastRow = sheet.getLastRow() + 1;
+    
+    const values = {
+      'ID': record.rid || '',
+      'Name': record.gname || '',
+      'Content': record.content || '',
+      'Picture': record.picture || '',
+      'PubDate': timestamp,
+      'entry_type': record.entry_type || '',
+      'key_id': record.key_id || '',
+      'Likes': record.likes || 0,
+      'Comments': record.comments || 0,
+      'x': record.x || 0,
+      'y': record.y || 0,
+      'flowerName': record.flowerName || '未知'
+    };
+    
+    for (const [header, value] of Object.entries(values)) {
+      const col = colIndex(header);
+      if (col > 0) {
+        sheet.getRange(lastRow, col).setValue(value);
+      }
+    }
+    
+    saveView(record.rid, 'post', record.entry_type, record.key_id, record.gname);
+    return {
+      success: true,
+      message: 'save sucess',
+      data: {
+        rid: record.rid,
+        timestamp: timestamp
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'save fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+// 获取所有记录（保留作为备用，优先使用 getSheetData）
+function getAllRecords() {
+  try {
+    const sheet = getSheet(0);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    
+    const records = [];
+    const headers = values[0];
+    
+    for (let i = 1; i < values.length; i++) {
+      const record = {};
+      for (let j = 0; j < headers.length; j++) {
+        const key = headers[j].toLowerCase().replace(/\s+/g, '_');
+        record[key] = values[i][j];
+      }
+      records.push(record);
+    }
+    
+    return {
+      success: true,
+      count: records.length,
+      data: records
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'getrecord fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+
+// 获取所有评论记录（保留作为备用，优先使用 getSheetData）
+function getAllComments() {
+  try {
+    const sheet = getSheet(1);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    
+    const records = [];
+    const headers = values[0];
+    
+    for (let i = 1; i < values.length; i++) {
+      const record = {};
+      for (let j = 0; j < headers.length; j++) {
+        const key = headers[j].toLowerCase().replace(/\s+/g, '_');
+        record[key] = values[i][j];
+      }
+      records.push(record);
+    }
+    
+    return {
+      success: true,
+      count: records.length,
+      data: records
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'getrecord fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * 获取指定日期之后的新增记录（从后往前遍历，找到最新记录后停止）
+ * @param {string} sinceDate ISO格式的日期字符串
+ * @return {Object} 包含新增记录的数据对象
+ */
+function getLatestRecords(sinceDate) {
+  try {
+    const sheet = getSheet(0);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    
+    const records = [];
+    const headers = values[0];
+    const pubDateIndex = headers.indexOf('PubDate');
+    const since = sinceDate ? new Date(sinceDate) : new Date('1970-01-01');
+    
+    // 从后往前遍历，遇到早于since的记录就停止
+    for (let i = values.length - 1; i >= 1; i--) {
+      const recordDate = pubDateIndex >= 0 ? new Date(values[i][pubDateIndex]) : new Date(0);
+      if (recordDate <= since) break; // 已遍历完所有新记录
+      
+      const record = {};
+      for (let j = 0; j < headers.length; j++) {
+        const key = headers[j].toLowerCase().replace(/\s+/g, '_');
+        record[key] = values[i][j];
+      }
+      records.push(record);
+    }
+    
+    // 反转回正确顺序
+    records.reverse();
+    
+    return {
+      success: true,
+      count: records.length,
+      data: records
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'getlatestrecords fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * 获取指定日期之后的新增评论（从后往前遍历，找到最新记录后停止）
+ * @param {string} sinceDate ISO格式的日期字符串
+ * @return {Object} 包含新增评论的数据对象
+ */
+function getLatestComments(sinceDate) {
+  try {
+    const sheet = getSheet(1);
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    
+    const records = [];
+    const headers = values[0];
+    const cdateIndex = headers.indexOf('Cdate');
+    const since = sinceDate ? new Date(sinceDate) : new Date('1970-01-01');
+    
+    for (let i = values.length - 1; i >= 1; i--) {
+      const recordDate = cdateIndex >= 0 ? new Date(values[i][cdateIndex]) : new Date(0);
+      if (recordDate <= since) break;
+      
+      const record = {};
+      for (let j = 0; j < headers.length; j++) {
+        const key = headers[j].toLowerCase().replace(/\s+/g, '_');
+        record[key] = values[i][j];
+      }
+      records.push(record);
+    }
+    
+    records.reverse();
+    
+    return {
+      success: true,
+      count: records.length,
+      data: records
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'getlatestcomments fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * 获取活跃度统计（优化：只读取必要列，从后往前遍历）
+ * @return {Object} 包含活跃用户数和今日访客数
+ */
+function getActivityStats() {
+  try {
+    const sheet = getSheet(2); // View表
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+    
+    const timestampIndex = headers.indexOf('timestamp');
+    const entryTypeIndex = headers.indexOf('entry_type');
+    const nameIndex = headers.indexOf('name');
+    
+    if (timestampIndex === -1 || entryTypeIndex === -1) {
+      return { success: false, message: '找不到必要的列' };
+    }
+    
+    const now = new Date();
+    const fiveMinutesAgo = now.getTime() - 5 * 60 * 1000;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    let activeUsers = 0;
+    const uniqueTodayVisitors = new Set();
+    
+    // 从后往前遍历，提高效率
+    for (let i = values.length - 1; i >= 1; i--) {
+      const row = values[i];
+      const timestamp = row[timestampIndex].getTime ? row[timestampIndex].getTime() : new Date(row[timestampIndex]).getTime();
+      
+      // 超出今日范围，提前终止
+      if (timestamp < todayStart) break;
+      
+      const entryType = String(row[entryTypeIndex] || '');
+      
+      // 只统计home和garden类型
+      if (entryType !== 'home' && entryType !== 'garden') continue;
+      
+      // 最近5分钟内活跃
+      if (timestamp >= fiveMinutesAgo) {
+        activeUsers++;
+      }
+      
+      // 今日home访问去重统计
+      if (entryType === 'home') {
+        const name = nameIndex >= 0 ? row[nameIndex] : 'anonymous';
+        uniqueTodayVisitors.add(name);
+      }
+    }
+    
+    return {
+      success: true,
+      data: {
+        activeUsers: activeUsers,
+        todayVisitors: uniqueTodayVisitors.size
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'getactivity fail: ' + error.toString(),
+      error: error.toString()
+    };
+  }
+}
