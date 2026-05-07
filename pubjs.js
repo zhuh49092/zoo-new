@@ -1,5 +1,5 @@
 ﻿// Google Apps Script部署后的Web应用URL 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbycbLEoQsGkRxzsqnQ_91bhtHkEHM6lBJA7uRwmw1JCmqHEIObW5YyMfQQCiCtXVJFoXA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz1P0MeoIfl5a0hqOF8y1UixzWkEVRvO9NghwSO8bizmAAqLAyETENHsxPtUtn_YDsaog/exec';
 
 // GitHub 配置
 const GITHUB_CONFIG = {
