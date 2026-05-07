@@ -72,15 +72,17 @@ body {
     transform: scale(1.05);
 }
 
-.plant img {
+.plant > img {
     width: 80px;
     height: auto;
     pointer-events: none;
+    position: relative;
+    z-index: 10;
 }
 
 .plant-user-image {
     position: absolute;
-    top: 50%;
+    top: 68%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 40px;
@@ -90,7 +92,7 @@ body {
     background-color: rgba(255, 255, 255, 0.8);
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    z-index: 11;
+    z-index: 12;
     opacity: 0.9;
 }
 
@@ -103,7 +105,7 @@ body {
 
 .plant-user-text {
     position: absolute;
-    top: 50%;
+    top: 66%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 40px;
@@ -115,7 +117,7 @@ body {
     color: #333;
     text-align: center;
     word-wrap: break-word;
-    z-index: 11;
+    z-index: 12;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     line-height: 1.1;
     display: flex;
@@ -714,4 +716,33 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+.move-plant-hint {
+    position: fixed;
+    top: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(90vw, 440px);
+    padding: 12px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #fff7bf, #ffe08a);
+    color: #6b4f00;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
+    box-shadow: 0 6px 18px rgba(181, 141, 0, 0.22);
+    z-index: 8500;
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .move-plant-hint {
+        top: 84px;
+        max-width: calc(100vw - 28px);
+        padding: 11px 14px;
+        font-size: 14px;
+        border-radius: 16px;
+    }
 }

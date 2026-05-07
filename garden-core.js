@@ -487,6 +487,20 @@ function createPlant() {
 let pendingPlant = null;
 let $plantOverlay = null;
 let $plantOverlayImg = null;
+let $movePlantHint = null;
+
+function hideMovePlantHint() {
+    if ($movePlantHint) {
+        $movePlantHint.remove();
+        $movePlantHint = null;
+    }
+}
+
+function showMovePlantHint() {
+    hideMovePlantHint();
+    $movePlantHint = $('<div class="move-plant-hint">花を押して好きな位置に移動しましょう</div>');
+    $('body').append($movePlantHint);
+}
 
 // 显示种植蒙板
 function showPlantingOverlay() {
@@ -609,17 +623,32 @@ function showPlantingOverlay() {
         cancelPlant();
     });
     
-    // 提示文字
+    // 顶部提示文字
+    const $topPrompt = $('<div class="plant-overlay-title"></div>');
+    $topPrompt.css({
+        'margin-bottom': '22px',
+        'padding': '0 24px',
+        'color': 'white',
+        'font-size': 'clamp(22px, 5vw, 30px)',
+        'font-weight': '700',
+        'line-height': '1.4',
+        'text-align': 'center',
+        'text-shadow': '0 2px 10px rgba(0, 0, 0, 0.35)'
+    }).text('今の気持ちに合う花を選んでね');
+
+    // 底部提示文字
     const $hint = $('<div class="plant-overlay-hint"></div>');
     $hint.css({
         'margin-top': '30px',
         'color': 'white',
         'font-size': '14px',
+        'font-weight': '600',
+        'padding': '0 24px',
         'text-align': 'center'
-    }).html('タップで投稿｜左右で花を選べます');
+    }).text('タップで植える｜左右で花を選ぶ');
     
     $container.append($leftArrow, $plantOverlayImg, $rightArrow);
-    $plantOverlay.append($closeBtn, $container, $hint);
+    $plantOverlay.append($closeBtn, $topPrompt, $container, $hint);
     $('body').append($plantOverlay);
     $('body').css('overflow', 'hidden');
 }
@@ -630,6 +659,7 @@ function hidePlantingOverlay() {
         $plantOverlay.fadeOut(300, function() {
             $plantOverlay.remove();
             $plantOverlay = null;
+            $plantOverlayImg = null;
             $('body').css('overflow', 'auto');
         });
     }
@@ -639,6 +669,7 @@ function hidePlantingOverlay() {
 function cancelPlant() {
     // 隐藏蒙板
     hidePlantingOverlay();
+    hideMovePlantHint();
     
     // 清除待种植状态
     pendingPlant = null;
@@ -657,6 +688,7 @@ function finalizePlant() {
     registerPlant(pendingPlant);
     cachedPlantsArray = null;
     renderPlant(pendingPlant, false); // 不显示箭头
+    showMovePlantHint();
     
     // 清除待种植状态
     pendingPlant = null;
@@ -775,6 +807,7 @@ function makePlantDraggable($element, plant) {
             $element.removeClass('dragging');
             
             if (hasDragged) {
+                hideMovePlantHint();
                 const overlapping = checkOverlap(plant);
                 
                 if (overlapping) {
@@ -789,9 +822,9 @@ function makePlantDraggable($element, plant) {
                     clickAllowed = true;
                     setTimeout(function() { clickAllowed = false; }, getDragClickDelay());
                     
-                    // 可移动花草拖动后显示保存位置按钮
+                    // 可移动花草拖动结束后自动保存位置（debounce）
                     if (plant.isMovable) {
-                        showSavePositionBtn(plant);
+                        scheduleAutoSavePosition(plant);
                     }
                 }
             } else {
@@ -886,68 +919,39 @@ function makePlantDraggable($element, plant) {
     };
 }
 
-// 显示保存位置按钮
-let savePositionBtnTimer = null;
-function showSavePositionBtn(plant) {
-    // 清除之前的计时器和按钮
-    if (savePositionBtnTimer) {
-        clearTimeout(savePositionBtnTimer);
-        savePositionBtnTimer = null;
-    }
+// 拖动结束后自动保存位置（debounce，仅保存最后一次位置）
+const positionSaveDebounceTimers = new Map();
+const POSITION_SAVE_DEBOUNCE_MS = 700;
+
+function scheduleAutoSavePosition(plant) {
+    if (!plant || !plant.recordId) return;
+
     $('.save-position-btn').remove();
-    
-    const $btn = $('<div class="save-position-btn"><i class="fas fa-location-arrow"></i> 位置を保存</div>');
-    $btn.css({
-        'position': 'fixed',
-        'bottom': '20px',
-        'left': '50%',
-        'transform': 'translateX(-50%)',
-        'background-color': 'rgba(34, 197, 94, 0.9)',
-        'color': 'white',
-        'padding': '10px 20px',
-        'border-radius': '20px',
-        'cursor': 'pointer',
-        'font-size': '13px',
-        'z-index': '7000',
-        'box-shadow': '0 2px 8px rgba(0,0,0,0.2)',
-        'display': 'flex',
-        'align-items': 'center',
-        'gap': '6px',
-        'transition': 'opacity 0.3s',
-        'white-space': 'nowrap'
-    }).on('mouseenter', function() {
-        $(this).css('background-color', 'rgba(22, 163, 74, 0.95)');
-    }).on('mouseleave', function() {
-        $(this).css('background-color', 'rgba(34, 197, 94, 0.9)');
-    }).on('click', async function() {
-        $(this).remove();
-        if (savePositionBtnTimer) {
-            clearTimeout(savePositionBtnTimer);
-            savePositionBtnTimer = null;
-        }
-        
-        // 调用 GS 更新位置
+
+    const existingTimer = positionSaveDebounceTimers.get(plant.id);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(async function() {
+        positionSaveDebounceTimers.delete(plant.id);
         try {
             await postData('updatePosition', {
                 rid: plant.recordId,
                 x: plant.x,
                 y: plant.y
             });
-            showBubbleMessage('位置を保存しました！', 'success');
+            console.log('位置を自動保存しました', {
+                rid: plant.recordId,
+                x: plant.x,
+                y: plant.y
+            });
         } catch (err) {
-            showBubbleMessage('位置の保存に失敗しました：' + err.message, 'warning');
+            console.warn('位置の自動保存に失敗しました:', err);
         }
-    });
-    
-    $('body').append($btn);
-    
-    // 5秒后自动消失
-    savePositionBtnTimer = setTimeout(function() {
-        $btn.fadeOut(300, function() {
-            $(this).remove();
-        });
-        savePositionBtnTimer = null;
-    }, 5000);
+    }, POSITION_SAVE_DEBOUNCE_MS);
+
+    positionSaveDebounceTimers.set(plant.id, timer);
 }
 
 // 检查是否与现有花草重叠
@@ -1284,8 +1288,8 @@ function showSubmitForm(plant) {
     
     const contentHtml = '<div class="space-y-4">' +
         '<div class="text-center space-y-2 mb-2">' +
-        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">フェスタで楽しかったことを教えて〜</div>' +
-        '<div class="text-gray-800 text-sm leading-relaxed">一言でもOK！あなたの言葉で花が育ちます🌸<br>（写真は自由にどうぞ）</div>' +
+        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">その気持ち、どんなお話？</div>' +
+        '<div class="text-gray-800 text-sm leading-relaxed">ひとことでも大丈夫。<br>その気持ち、よかったら聞かせてね🌸<br><br>（写真は自由にどうぞ）</div>' +
         '</div>' +
         '<div>' +
         '<label class="block text-sm font-medium text-gray-700 mb-2">写真</label>' +
