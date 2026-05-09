@@ -495,8 +495,7 @@ let onboardingStepIndex = 0;
 let onboardingActive = false;
 let $onboardingOverlay = null;
 let $onboardingTip = null;
-let $onboardingArrow = null;
-let $onboardingArrowShape = null;
+// onboarding 箭头已禁用（按需求移除）
 
 function isOnboardingDone() {
     try {
@@ -512,49 +511,11 @@ function setOnboardingDone() {
     } catch (e) {}
 }
 
-function findMostProminentPlantElement() {
-    const plantsEls = document.querySelectorAll('#plants-layer .plant');
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const cx = vw / 2;
-    const cy = vh / 2;
-    let bestEl = null;
-    let bestScore = -Infinity;
-
-    for (let i = 0; i < plantsEls.length; i++) {
-        const el = plantsEls[i];
-        const r = el.getBoundingClientRect();
-        const visible = r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;
-        if (!visible) continue;
-
-        // 视口内可见面积（越大越“明显”）
-        const ix = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
-        const iy = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
-        const area = ix * iy;
-
-        // 距离屏幕中心（越近越优先）
-        const mx = (r.left + r.right) / 2;
-        const my = (r.top + r.bottom) / 2;
-        const dist = Math.hypot(mx - cx, my - cy);
-
-        const score = area - dist * 40;
-        if (score > bestScore) {
-            bestScore = score;
-            bestEl = el;
-        }
-    }
-
-    return bestEl;
-}
-
 function ensureOnboardingUI() {
     if ($onboardingOverlay) return;
     $onboardingOverlay = $('<div id="onboarding-overlay"></div>');
     $onboardingTip = $('<div class="onboarding-tip"></div>');
-    $onboardingArrow = $('<div class="onboarding-arrow"></div>');
-    $onboardingArrowShape = $('<div class="onboarding-arrow-shape dir-down-right"></div>');
-    $onboardingArrow.append($onboardingArrowShape);
-    $onboardingOverlay.append($onboardingTip, $onboardingArrow);
+    $onboardingOverlay.append($onboardingTip);
     $('body').append($onboardingOverlay);
 }
 
@@ -563,8 +524,6 @@ function clearOnboardingUI() {
         $onboardingOverlay.remove();
         $onboardingOverlay = null;
         $onboardingTip = null;
-        $onboardingArrow = null;
-        $onboardingArrowShape = null;
     }
     $('#plant-btn').removeClass('onboarding-plant-btn-glow');
 }
@@ -609,41 +568,12 @@ function setTipPositionNearPlantBtn() {
     });
 }
 
-function setArrowToElement(targetEl, directionClass) {
-    if (!$onboardingArrow || !$onboardingArrowShape) return;
-    if (!targetEl) {
-        // fallback：没有花时，指向屏幕中央附近
-        const x = Math.round(window.innerWidth * 0.52);
-        const y = Math.round(window.innerHeight * 0.52);
-        $onboardingArrow.css({ left: (x - 27) + 'px', top: (y - 27) + 'px' }).show();
-        $onboardingArrowShape
-            .removeClass('dir-down-right dir-up-right dir-right dir-left')
-            .addClass(directionClass || 'dir-down-right');
-        return;
-    }
-    const r = targetEl.getBoundingClientRect();
-
-    // 箭头默认放在目标左上方，指向目标（温和、不遮挡）
-    let x = r.left - 38;
-    let y = r.top - 38;
-
-    // clamp
-    x = Math.max(10, Math.min(window.innerWidth - 60, x));
-    y = Math.max(10, Math.min(window.innerHeight - 60, y));
-
-    $onboardingArrow.css({ left: x + 'px', top: y + 'px' }).show();
-    $onboardingArrowShape
-        .removeClass('dir-down-right dir-up-right dir-right dir-left')
-        .addClass(directionClass || 'dir-down-right');
-}
-
 function renderOnboardingStep() {
     ensureOnboardingUI();
     if (!$onboardingTip) return;
 
     // 默认不阻挡拖拽/缩放
     $('#plant-btn').removeClass('onboarding-plant-btn-glow');
-    $onboardingArrow.hide();
 
     if (onboardingStepIndex === 0) {
         $onboardingTip.html('指で庭を探検しよう。<br>ピンチで拡大・縮小できます。');
@@ -651,13 +581,9 @@ function renderOnboardingStep() {
     } else if (onboardingStepIndex === 1) {
         $onboardingTip.html('花を押すと、<br>みんなのお話が見れます');
         setTipPositionTopLeft();
-        const plantEl = findMostProminentPlantElement();
-        setArrowToElement(plantEl, 'dir-down-right'); // plantEl 为 null 时会自动 fallback
     } else if (onboardingStepIndex === 2) {
         $onboardingTip.html('ボタンから花を植えます');
         setTipPositionNearPlantBtn();
-        const btn = document.getElementById('plant-btn');
-        setArrowToElement(btn, 'dir-up-right');
         $('#plant-btn').addClass('onboarding-plant-btn-glow');
     } else {
         hideOnboarding();
