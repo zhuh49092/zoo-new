@@ -489,6 +489,204 @@ let $plantOverlay = null;
 let $plantOverlayImg = null;
 let $movePlantHint = null;
 
+// ===== 新手引导 Onboarding（仅 UI，不影响业务逻辑）=====
+const ONBOARDING_DONE_KEY = 'jr_onboardingDone';
+let onboardingStepIndex = 0;
+let onboardingActive = false;
+let $onboardingOverlay = null;
+let $onboardingTip = null;
+let $onboardingArrow = null;
+let $onboardingArrowShape = null;
+
+function isOnboardingDone() {
+    try {
+        return localStorage.getItem(ONBOARDING_DONE_KEY) === '1';
+    } catch (e) {
+        return false;
+    }
+}
+
+function setOnboardingDone() {
+    try {
+        localStorage.setItem(ONBOARDING_DONE_KEY, '1');
+    } catch (e) {}
+}
+
+function findMostProminentPlantElement() {
+    const plantsEls = document.querySelectorAll('#plants-layer .plant');
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const cx = vw / 2;
+    const cy = vh / 2;
+    let bestEl = null;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < plantsEls.length; i++) {
+        const el = plantsEls[i];
+        const r = el.getBoundingClientRect();
+        const visible = r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;
+        if (!visible) continue;
+
+        // 视口内可见面积（越大越“明显”）
+        const ix = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+        const iy = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+        const area = ix * iy;
+
+        // 距离屏幕中心（越近越优先）
+        const mx = (r.left + r.right) / 2;
+        const my = (r.top + r.bottom) / 2;
+        const dist = Math.hypot(mx - cx, my - cy);
+
+        const score = area - dist * 40;
+        if (score > bestScore) {
+            bestScore = score;
+            bestEl = el;
+        }
+    }
+
+    return bestEl;
+}
+
+function ensureOnboardingUI() {
+    if ($onboardingOverlay) return;
+    $onboardingOverlay = $('<div id="onboarding-overlay"></div>');
+    $onboardingTip = $('<div class="onboarding-tip"></div>');
+    $onboardingArrow = $('<div class="onboarding-arrow"></div>');
+    $onboardingArrowShape = $('<div class="onboarding-arrow-shape dir-down-right"></div>');
+    $onboardingArrow.append($onboardingArrowShape);
+    $onboardingOverlay.append($onboardingTip, $onboardingArrow);
+    $('body').append($onboardingOverlay);
+}
+
+function clearOnboardingUI() {
+    if ($onboardingOverlay) {
+        $onboardingOverlay.remove();
+        $onboardingOverlay = null;
+        $onboardingTip = null;
+        $onboardingArrow = null;
+        $onboardingArrowShape = null;
+    }
+    $('#plant-btn').removeClass('onboarding-plant-btn-glow');
+}
+
+function hideOnboarding() {
+    onboardingActive = false;
+    document.removeEventListener('click', handleOnboardingAdvance, true);
+    document.removeEventListener('touchend', handleOnboardingAdvance, true);
+    clearOnboardingUI();
+    // 已按需求禁用 onboardingDone 逻辑：每次进入都显示
+}
+
+function setTipPositionTopLeft() {
+    if (!$onboardingTip) return;
+    $onboardingTip.css({
+        position: 'fixed',
+        top: '88px',
+        left: '18px',
+        right: 'auto',
+        bottom: 'auto',
+        transform: 'none'
+    });
+}
+
+function setTipPositionNearPlantBtn() {
+    if (!$onboardingTip) return;
+    const btn = document.getElementById('plant-btn');
+    if (!btn) {
+        setTipPositionTopLeft();
+        return;
+    }
+    const r = btn.getBoundingClientRect();
+    const top = Math.min(window.innerHeight - 120, r.bottom + 14);
+    const right = Math.max(18, window.innerWidth - r.right);
+    $onboardingTip.css({
+        position: 'fixed',
+        top: top + 'px',
+        right: right + 'px',
+        left: 'auto',
+        bottom: 'auto',
+        transform: 'none'
+    });
+}
+
+function setArrowToElement(targetEl, directionClass) {
+    if (!$onboardingArrow || !$onboardingArrowShape) return;
+    if (!targetEl) {
+        // fallback：没有花时，指向屏幕中央附近
+        const x = Math.round(window.innerWidth * 0.52);
+        const y = Math.round(window.innerHeight * 0.52);
+        $onboardingArrow.css({ left: (x - 27) + 'px', top: (y - 27) + 'px' }).show();
+        $onboardingArrowShape
+            .removeClass('dir-down-right dir-up-right dir-right dir-left')
+            .addClass(directionClass || 'dir-down-right');
+        return;
+    }
+    const r = targetEl.getBoundingClientRect();
+
+    // 箭头默认放在目标左上方，指向目标（温和、不遮挡）
+    let x = r.left - 38;
+    let y = r.top - 38;
+
+    // clamp
+    x = Math.max(10, Math.min(window.innerWidth - 60, x));
+    y = Math.max(10, Math.min(window.innerHeight - 60, y));
+
+    $onboardingArrow.css({ left: x + 'px', top: y + 'px' }).show();
+    $onboardingArrowShape
+        .removeClass('dir-down-right dir-up-right dir-right dir-left')
+        .addClass(directionClass || 'dir-down-right');
+}
+
+function renderOnboardingStep() {
+    ensureOnboardingUI();
+    if (!$onboardingTip) return;
+
+    // 默认不阻挡拖拽/缩放
+    $('#plant-btn').removeClass('onboarding-plant-btn-glow');
+    $onboardingArrow.hide();
+
+    if (onboardingStepIndex === 0) {
+        $onboardingTip.html('指で庭を探検しよう。<br>ピンチで拡大・縮小できます。');
+        setTipPositionTopLeft();
+    } else if (onboardingStepIndex === 1) {
+        $onboardingTip.html('花を押すと、<br>みんなのお話が見れます');
+        setTipPositionTopLeft();
+        const plantEl = findMostProminentPlantElement();
+        setArrowToElement(plantEl, 'dir-down-right'); // plantEl 为 null 时会自动 fallback
+    } else if (onboardingStepIndex === 2) {
+        $onboardingTip.html('ボタンから花を植えます');
+        setTipPositionNearPlantBtn();
+        const btn = document.getElementById('plant-btn');
+        setArrowToElement(btn, 'dir-up-right');
+        $('#plant-btn').addClass('onboarding-plant-btn-glow');
+    } else {
+        hideOnboarding();
+    }
+}
+
+function handleOnboardingAdvance(e) {
+    if (!onboardingActive) return;
+    // 仅用于 onboarding 切换；不希望触发底层点击（开弹窗/种花/点赞等）
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+
+    onboardingStepIndex++;
+    if (onboardingStepIndex >= 3) {
+        hideOnboarding();
+        return;
+    }
+    renderOnboardingStep();
+}
+
+function initOnboarding() {
+    // 已按需求禁用 onboardingDone：每次刷新/进入都显示
+    onboardingActive = true;
+    onboardingStepIndex = 0;
+    renderOnboardingStep();
+    document.addEventListener('click', handleOnboardingAdvance, true);
+    document.addEventListener('touchend', handleOnboardingAdvance, true);
+}
+
 function hideMovePlantHint() {
     if ($movePlantHint) {
         $movePlantHint.remove();
@@ -2030,8 +2228,8 @@ function initGarden() {
         // 视口移动完成后，隐藏 loading
         setTimeout(function() {
             $.hideLoading();
-            // 首次进入提示
-            showActivityMessage('指で動かして庭を探検しよう。ピンチで拡大・縮小できます。花をタップすると、みんなの物語が見られます。右上のボタンから花を植えることもできます🌱自分や他人の顔が映る写真をアップロードしないてお願いします');
+            // 首次进入引导：三步点击式 onboarding（只做 UI，不影响业务逻辑）
+            initOnboarding();
         }, 500); // 给一点时间让用户看到移动效果
     });
 

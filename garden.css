@@ -260,17 +260,115 @@ body {
     border-radius: 50%;
     cursor: pointer;
     z-index: 1000;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    box-shadow:
+        0 0 0 6px rgba(255, 234, 160, 0.30),
+        0 8px 18px rgba(0,0,0,0.22);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    animation: plantBtnGlowBreath 3.2s ease-in-out infinite;
 }
 
 #plant-btn:hover {
     transform: scale(1.1);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    box-shadow:
+        0 0 0 7px rgba(255, 234, 160, 0.38),
+        0 10px 22px rgba(0,0,0,0.28);
 }
 
 #plant-btn:active {
     transform: scale(0.95);
+}
+
+/* ===== Onboarding（新手引导）UI ===== */
+#onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    pointer-events: none; /* 不阻挡地图拖动/缩放 */
+}
+
+.onboarding-tip {
+    max-width: min(78vw, 340px);
+    background: rgba(255, 247, 191, 0.96);
+    border-radius: 18px;
+    padding: 14px 16px;
+    box-shadow: 0 10px 24px rgba(167, 129, 36, 0.16);
+    color: #5b4a1f;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.7;
+    letter-spacing: 0.02em;
+    z-index: 12002;
+}
+
+.onboarding-arrow {
+    position: fixed;
+    width: 54px;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 12001;
+    pointer-events: none;
+    animation: onboardingPulse 2.6s ease-in-out infinite;
+    filter: drop-shadow(0 8px 16px rgba(166, 128, 34, 0.18));
+}
+
+.onboarding-arrow-shape {
+    width: 22px;
+    height: 22px;
+    border-right: 8px solid #f6c445;
+    border-bottom: 8px solid #f6c445;
+    border-radius: 4px;
+    opacity: 0.95;
+}
+
+.onboarding-arrow-shape.dir-down-right { transform: rotate(45deg); }
+.onboarding-arrow-shape.dir-up-right { transform: rotate(-45deg); }
+.onboarding-arrow-shape.dir-right { transform: rotate(0deg); }
+.onboarding-arrow-shape.dir-left { transform: rotate(180deg); }
+
+@keyframes onboardingPulse {
+    0%, 100% { transform: scale(1); opacity: 0.95; }
+    50%      { transform: scale(1.08); opacity: 1; }
+}
+
+/* Step3: 右上按钮柔和发光（非霓虹） */
+#plant-btn.onboarding-plant-btn-glow {
+    box-shadow:
+        0 0 0 6px rgba(255, 234, 160, 0.45),
+        0 10px 22px rgba(240, 190, 70, 0.32),
+        0 4px 15px rgba(0,0,0,0.25);
+    animation: onboardingGlowBreath 2.8s ease-in-out infinite;
+}
+
+@keyframes onboardingGlowBreath {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 0 6px rgba(255, 234, 160, 0.40),
+            0 10px 22px rgba(240, 190, 70, 0.28),
+            0 4px 15px rgba(0,0,0,0.25);
+    }
+    50% {
+        transform: scale(1.04);
+        box-shadow:
+            0 0 0 8px rgba(255, 234, 160, 0.52),
+            0 12px 26px rgba(240, 190, 70, 0.36),
+            0 4px 15px rgba(0,0,0,0.25);
+    }
+}
+
+@keyframes plantBtnGlowBreath {
+    0%, 100% {
+        box-shadow:
+            0 0 0 6px rgba(255, 234, 160, 0.26),
+            0 8px 18px rgba(0,0,0,0.22);
+    }
+    50% {
+        box-shadow:
+            0 0 0 8px rgba(255, 234, 160, 0.38),
+            0 10px 22px rgba(0,0,0,0.25);
+    }
 }
 
 #save-btn {
