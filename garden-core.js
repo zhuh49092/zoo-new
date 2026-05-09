@@ -160,7 +160,7 @@ function getLatestDateFromDateArray(dates) {
 function createPlantFromRecord(record) {
     const cfg = window.GARDEN_CONFIG;
     // 统一使用小写字段名（兼容 GS 返回的数据）
-    const flowerName = record.flowername || '';
+    const flowerName = (record.flowername || '').toString().replace(/^plant\//, '').replace(/\.png$/i, '');
     const picture = record.picture || '';
     const content = record.content || '';
     const name = record.name || record.gname || '';
@@ -1798,6 +1798,17 @@ function spawnMultipleBees() {
 function initGarden() {
     const cfg = window.GARDEN_CONFIG;
 
+    // 根据 plantImageCount 自动生成花素材列表：A01.png, A02.png ...
+    // 说明：plant/bg.png 与 plant/icon.png 不属于花素材，且不在此列表中
+    if ((!cfg.plantImages || cfg.plantImages.length === 0) && Number(cfg.plantImageCount) > 0) {
+        const count = Math.max(0, Math.floor(Number(cfg.plantImageCount)));
+        cfg.plantImages = [];
+        for (let i = 1; i <= count; i++) {
+            const n = String(i).padStart(2, '0'); // A01 ~ A09（>=100 会变为 A100）
+            cfg.plantImages.push('A' + n);
+        }
+    }
+
     // 规范化植物图片路径：统一添加前缀和后缀
     if (cfg.plantImages && cfg.plantImages.length > 0) {
         cfg.plantImages = cfg.plantImages
@@ -1810,7 +1821,7 @@ function initGarden() {
 
     // 安全检查：如果没有植物图片，给出警告
     if (!cfg.plantImages || cfg.plantImages.length === 0) {
-        console.error('植物图片列表为空，请检查 garden.html 中的 plantImages 配置');
+        console.error('植物图片列表为空，请检查 index.html 中的 plantImageCount/plantImages 配置');
     }
 
     updateTimeOverlay();
@@ -2070,7 +2081,7 @@ function initGarden() {
                 
                 data.forEach(function(record, index) {
                     // 统一使用小写字段名（兼容 GS 返回的数据）
-                    const flowerName = record.flowername || '';
+                    const flowerName = (record.flowername || '').toString().replace(/^plant\//, '').replace(/\.png$/i, '');
                     const picture = record.picture || '';
                     const content = record.content || '';
                     const name = record.name || record.gname || '';
