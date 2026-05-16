@@ -26,30 +26,104 @@ function getEntryContext() {
 
 // 加载/隐藏提示
 $(function() {
-    $.showLoading = function() {
+    $.showLoading = function(options) {
+        const opts = options || {};
+        const mode = opts.mode || 'overlay'; // overlay | toast
+        const text = opts.text || '';
+
+        // 避免重复堆叠：已有 loading 时复用同一层并更新文本/样式
+        const existing = $('#loadingOverlay');
+        if (existing.length > 0) {
+            existing.attr('data-mode', mode);
+            const label = existing.find('.loading-label');
+            if (label.length > 0) {
+                if (text) {
+                    label.text(text).show();
+                } else {
+                    label.hide();
+                }
+            }
+            return;
+        }
+
         const overlay = $('<div id="loadingOverlay"></div>');
-        overlay.css({
-            'position': 'fixed', 'top': '0', 'left': '0', 'width': '100%', 'height': '100%',
-            'background-color': 'rgba(0, 0, 0, 0.5)', 'display': 'flex',
-            'align-items': 'center', 'justify-content': 'center', 'z-index': '9999'
-        });
+        if (mode === 'toast') {
+            overlay.css({
+                'position': 'fixed',
+                'top': '50%',
+                'left': '50%',
+                'transform': 'translate(-50%, -50%)',
+                'background-color': 'rgba(30, 30, 30, 0.72)',
+                'color': '#fff',
+                'padding': '12px 16px',
+                'border-radius': '12px',
+                'display': 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                'gap': '10px',
+                'z-index': '9999',
+                'backdrop-filter': 'blur(2px)',
+                'box-shadow': '0 4px 14px rgba(0,0,0,0.2)',
+                'pointer-events': 'none'
+            });
+        } else {
+            overlay.css({
+                'position': 'fixed',
+                'top': '0',
+                'left': '0',
+                'width': '100%',
+                'height': '100%',
+                'background-color': 'rgba(0, 0, 0, 0.5)',
+                'display': 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                'z-index': '9999'
+            });
+        }
+
         const spinner = $('<div id="loadingSpinner"></div>');
         spinner.css({
-            'width': '50px', 'height': '50px', 'border': '5px solid #f3f3f3',
-            'border-top': '5px solid #3498db', 'border-radius': '50%',
-            'animation': 'spin 1s linear infinite'
+            'width': mode === 'toast' ? '18px' : '50px',
+            'height': mode === 'toast' ? '18px' : '50px',
+            'border': mode === 'toast' ? '2px solid rgba(255,255,255,0.35)' : '5px solid #f3f3f3',
+            'border-top': mode === 'toast' ? '2px solid #fff' : '5px solid #3498db',
+            'border-radius': '50%',
+            'animation': 'spin 0.9s linear infinite',
+            'flex-shrink': '0'
         });
-        const style = $('<style>').text(`
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        `);
-        $('head').append(style);
-        overlay.append(spinner);
+
+        const loadingText = $('<div class="loading-label"></div>');
+        if (text) {
+            loadingText.text(text).css({
+                'font-size': '14px',
+                'line-height': '1.2',
+                'white-space': 'nowrap'
+            });
+        } else {
+            loadingText.hide();
+        }
+
+        if ($('#loadingSpinStyle').length === 0) {
+            const style = $('<style id="loadingSpinStyle">').text(`
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            `);
+            $('head').append(style);
+        }
+
+        overlay.attr('data-mode', mode);
+        overlay.append(spinner, loadingText);
         $('body').append(overlay);
-        $('body').css('overflow', 'hidden');
+
+        if (mode !== 'toast') {
+            $('body').css('overflow', 'hidden');
+        }
     };
     $.hideLoading = function() {
+        const mode = $('#loadingOverlay').attr('data-mode');
         $('#loadingOverlay').remove();
-        $('body').css('overflow', 'auto');
+        if (mode !== 'toast') {
+            $('body').css('overflow', 'auto');
+        }
     };
 });
 
@@ -101,7 +175,14 @@ function compressImageToBase64(imageFile) {
 // 提交数据（返回 Promise）
 async function postData(maction, pdatas) {
     return new Promise((resolve, reject) => {
-        $.showLoading();
+        if (maction === 'updatePosition') {
+            $.showLoading({
+                mode: 'toast',
+                text: '花の位置をセーブ中……'
+            });
+        } else {
+            $.showLoading();
+        }
         fetch(SCRIPT_URL, {
             method: 'POST', mode: 'no-cors', cache: 'no-cache',
             headers: { 'Content-Type': 'application/json' },

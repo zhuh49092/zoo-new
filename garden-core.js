@@ -86,6 +86,42 @@ function chance(p) {
     return Math.random() < p;
 }
 
+// 根据数量生成花素材列表：plant/A01.png, plant/A02.png ...
+function buildPlantImagesByCount(count) {
+    const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+    const images = [];
+    for (let i = 1; i <= safeCount; i++) {
+        const n = String(i).padStart(2, '0');
+        images.push('plant/A' + n + '.png');
+    }
+    return images;
+}
+
+// 解析记录中的 flowername，支持 A01/A01.png/plant/A01.png；旧命名统一回退到 A01
+function resolvePlantImageIndex(rawFlowerName, plantImagesLength) {
+    if (!rawFlowerName || !plantImagesLength) return 0;
+    const normalized = String(rawFlowerName)
+        .trim()
+        .replace(/^plant\//i, '')
+        .replace(/\.png$/i, '')
+        .toUpperCase();
+    const match = normalized.match(/^A(\d+)$/);
+    if (!match) return 0;
+    const index = Number(match[1]) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= plantImagesLength) return 0;
+    return index;
+}
+
+function withPlantImageFallback($img, cfg) {
+    const fallback = (cfg.plantImages && cfg.plantImages[0]) ? cfg.plantImages[0] : 'plant/A01.png';
+    $img.on('error', function() {
+        if (this.dataset.fallbackApplied === '1') return;
+        this.dataset.fallbackApplied = '1';
+        this.src = fallback;
+    });
+    return $img;
+}
+
 // 筛选数据
 function filterData(data, _id) {
     if (commentCacheByRid.has(_id)) {
@@ -160,7 +196,7 @@ function getLatestDateFromDateArray(dates) {
 function createPlantFromRecord(record) {
     const cfg = window.GARDEN_CONFIG;
     // 统一使用小写字段名（兼容 GS 返回的数据）
-    const flowerName = (record.flowername || '').toString().replace(/^plant\//, '').replace(/\.png$/i, '');
+    const flowerName = record.flowername || record.flowerName || '';
     const picture = record.picture || '';
     const content = record.content || '';
     const name = record.name || record.gname || '';
@@ -171,30 +207,13 @@ function createPlantFromRecord(record) {
     const id = record.id || record.rid || '';
     const pubdate = record.pubdate || record.pubDate || '';
     
-    let imageIndex = 0;
-    if (flowerName) {
-        const targetPath = 'plant/' + flowerName + '.png';
-        for (let i = 0; i < cfg.plantImages.length; i++) {
-            if (cfg.plantImages[i] === targetPath) {
-                imageIndex = i;
-                break;
-            }
-        }
-        if (imageIndex === 0 && cfg.plantImages[0] !== targetPath) {
-            for (let i = 0; i < cfg.plantImages.length; i++) {
-                if (cfg.plantImages[i].includes(flowerName)) {
-                    imageIndex = i;
-                    break;
-                }
-            }
-        }
-    }
+    const imageIndex = resolvePlantImageIndex(flowerName, cfg.plantImages.length);
     
     return {
         id: currentPlantId++,
         recordId: id,
         imageIndex: imageIndex,
-        image: cfg.plantImages[imageIndex],
+        image: cfg.plantImages[imageIndex] || cfg.plantImages[0],
         userImage: picture,
         userContent: content,
         userName: name,
@@ -681,6 +700,7 @@ function showPlantingOverlay() {
     
     // 中间花草（点击投稿）
     $plantOverlayImg = $('<img src="' + pendingPlant.image + '" alt="plant-preview">');
+    withPlantImageFallback($plantOverlayImg, cfg);
     $plantOverlayImg.css({
         'width': '200px',
         'height': '200px',
@@ -758,7 +778,7 @@ function showPlantingOverlay() {
         'line-height': '1.4',
         'text-align': 'center',
         'text-shadow': '0 2px 10px rgba(0, 0, 0, 0.35)'
-    }).text('今の気持ちに合う花を選んでね');
+    }).text('そのときの気持ちに合う花を選んでね');
 
     // 底部提示文字
     const $hint = $('<div class="plant-overlay-hint"></div>');
@@ -839,6 +859,7 @@ function renderPlant(plant, showArrows) {
     $plant.css({ left: plant.x + 'px', top: plant.y + 'px' });
 
     const $img = $('<img src="' + plant.image + '" alt="plant">');
+    withPlantImageFallback($img, cfg);
     
     // 只有已投稿的花草才显示用户内容
     let $userContent;
@@ -1412,8 +1433,8 @@ function showSubmitForm(plant) {
     
     const contentHtml = '<div class="space-y-4">' +
         '<div class="text-center space-y-2 mb-2">' +
-        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">その気持ち、どんなお話？</div>' +
-        '<div class="text-gray-800 text-sm leading-relaxed">ひとことでも大丈夫。<br>その気持ち、よかったら聞かせてね🌸<br><br>（写真は自由にどうぞ）</div>' +
+        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">そのとき、どんな感じだった？</div>' +
+        '<div class="text-gray-800 text-sm leading-relaxed">ひとことでもOK。<br>（写真は自由にどうぞ）</div>' +
         '</div>' +
         '<div>' +
         '<label class="block text-sm font-medium text-gray-700 mb-2">写真</label>' +
@@ -1798,30 +1819,13 @@ function spawnMultipleBees() {
 function initGarden() {
     const cfg = window.GARDEN_CONFIG;
 
-    // 根据 plantImageCount 自动生成花素材列表：A01.png, A02.png ...
-    // 说明：plant/bg.png 与 plant/icon.png 不属于花素材，且不在此列表中
-    if ((!cfg.plantImages || cfg.plantImages.length === 0) && Number(cfg.plantImageCount) > 0) {
-        const count = Math.max(0, Math.floor(Number(cfg.plantImageCount)));
-        cfg.plantImages = [];
-        for (let i = 1; i <= count; i++) {
-            const n = String(i).padStart(2, '0'); // A01 ~ A09（>=100 会变为 A100）
-            cfg.plantImages.push('A' + n);
-        }
-    }
-
-    // 规范化植物图片路径：统一添加前缀和后缀
-    if (cfg.plantImages && cfg.plantImages.length > 0) {
-        cfg.plantImages = cfg.plantImages
-            .filter(function(img) { return img && img.trim(); })
-            .map(function(img) {
-                let name = img.replace(/^plant\//, '').replace(/\.png$/, '');
-                return 'plant/' + name + '.png';
-            });
-    }
+    // 花素材列表只由 plantImageCount 生成（A01/A02/...）
+    // 注意：plant/bg.png 与 plant/icon.png 不属于花素材
+    cfg.plantImages = buildPlantImagesByCount(cfg.plantImageCount);
 
     // 安全检查：如果没有植物图片，给出警告
     if (!cfg.plantImages || cfg.plantImages.length === 0) {
-        console.error('植物图片列表为空，请检查 index.html 中的 plantImageCount/plantImages 配置');
+        console.error('植物图片列表为空，请检查 index.html 中的 plantImageCount 配置');
     }
 
     updateTimeOverlay();
@@ -2080,53 +2084,7 @@ function initGarden() {
                 latestPubDate = getLatestDateFromDateArray(allDates);
                 
                 data.forEach(function(record, index) {
-                    // 统一使用小写字段名（兼容 GS 返回的数据）
-                    const flowerName = (record.flowername || '').toString().replace(/^plant\//, '').replace(/\.png$/i, '');
-                    const picture = record.picture || '';
-                    const content = record.content || '';
-                    const name = record.name || record.gname || '';
-                    const x = record.x !== undefined ? record.x : undefined;
-                    const y = record.y !== undefined ? record.y : undefined;
-                    const likes = record.likes || 0;
-                    const comments = record.comments || 0;
-                    const id = record.id || record.rid || '';
-                    const pubdate = record.pubdate || record.pubDate || '';
-                    
-                    let imageIndex = 0;
-                    if (flowerName) {
-                        const targetPath = 'plant/' + flowerName + '.png';
-                        for (let i = 0; i < cfg.plantImages.length; i++) {
-                            if (cfg.plantImages[i] === targetPath) {
-                                imageIndex = i;
-                                break;
-                            }
-                        }
-                        if (imageIndex === 0 && cfg.plantImages[0] !== targetPath) {
-                            for (let i = 0; i < cfg.plantImages.length; i++) {
-                                if (cfg.plantImages[i].includes(flowerName)) {
-                                    imageIndex = i;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    const plant = {
-                        id: currentPlantId++,
-                        recordId: id,
-                        imageIndex: imageIndex,
-                        image: cfg.plantImages[imageIndex],
-                        userImage: picture,
-                        userContent: content,
-                        userName: name,
-                        x: x !== undefined ? x : rand(200, cfg.worldSize.width - 200),
-                        y: y !== undefined ? y : rand(200, cfg.worldSize.height - 200),
-                        likes: likes,
-                        commentCount: comments,
-                        comments: [],
-                        isNew: false,
-                        createdTime: pubdate || new Date().toISOString()
-                    };
+                    const plant = createPlantFromRecord(record);
                     
                     // 从缓存获取评论
                     const recordComments = commentCacheByRid.get(plant.recordId);
