@@ -778,7 +778,7 @@ function showPlantingOverlay() {
         'line-height': '1.4',
         'text-align': 'center',
         'text-shadow': '0 2px 10px rgba(0, 0, 0, 0.35)'
-    }).text('そのときの気持ちに合う花を選んでね');
+    }).text('気持ちに合う花を選んでね');
 
     // 底部提示文字
     const $hint = $('<div class="plant-overlay-hint"></div>');
@@ -1433,8 +1433,8 @@ function showSubmitForm(plant) {
     
     const contentHtml = '<div class="space-y-4">' +
         '<div class="text-center space-y-2 mb-2">' +
-        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">そのとき、どんな感じだった？</div>' +
-        '<div class="text-gray-800 text-sm leading-relaxed">ひとことでもOK。<br>（写真は自由にどうぞ）</div>' +
+        '<div class="bg-lime-100 text-gray-800 text-base font-medium py-2 px-3 rounded">その気持ち、どんなお話？</div>' +
+        '<div class="text-gray-800 text-sm leading-relaxed">ひとことでもOK。<br>（写真は自由にどうぞ）人の顔を映さないように</div>' +
         '</div>' +
         '<div>' +
         '<label class="block text-sm font-medium text-gray-700 mb-2">写真</label>' +
